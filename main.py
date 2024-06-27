@@ -2,8 +2,7 @@ import json
 import random
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
-import asyncio
-import aiohttp
+import requests
 from loguru import logger
 import numpy as np
 import torch
@@ -31,63 +30,62 @@ app = FastAPI()
 # Define interfaces for databases and APIs
 class Database(ABC):
     @abstractmethod
-    async def connect(self):
+    def connect(self):
         pass
 
     @abstractmethod
-    async def disconnect(self):
+    def disconnect(self):
         pass
 
-    @abstractmethod
-    async def retry_operation(self, operation, max_retries=3):
+    def retry_operation(self, operation, max_retries=3):
         for attempt in range(max_retries):
             try:
-                return await operation()
+                return operation()
             except Exception as e:
                 if attempt == max_retries - 1:
                     raise e
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                time.sleep(2 ** attempt)  # Exponential backoff
 
 class VectorDB(Database):
     def __init__(self, config):
         self.config = config
         self.index = None
 
-    async def connect(self):
+    def connect(self):
         logger.info(f"Connecting to Vector DB: {self.config['host']}")
         dimension = 768  # Adjust based on your embedding size
         self.index = faiss.IndexFlatL2(dimension)
 
-    async def disconnect(self):
+    def disconnect(self):
         logger.info("Disconnecting from Vector DB")
         self.index = None
 
-    async def retrieve(self, query_vector):
+    def retrieve(self, query_vector):
         def _retrieve():
             distances, indices = self.index.search(query_vector, k=5)
             return [(int(i), float(d)) for i, d in zip(indices[0], distances[0])]
-        return await self.retry_operation(_retrieve)
+        return self.retry_operation(_retrieve)
 
 class RDBMS(Database):
     def __init__(self, config):
         self.config = config
         self.conn = None
 
-    async def connect(self):
+    def connect(self):
         logger.info(f"Connecting to RDBMS: {self.config['host']}")
         self.conn = psycopg2.connect(**self.config)
 
-    async def disconnect(self):
+    def disconnect(self):
         logger.info("Disconnecting from RDBMS")
         if self.conn:
             self.conn.close()
 
-    async def execute_query(self, query):
-        async def _execute():
+    def execute_query(self, query):
+        def _execute():
             with self.conn.cursor() as cur:
                 cur.execute(query)
                 return cur.fetchall()
-        return await self.retry_operation(_execute)
+        return self.retry_operation(_execute)
 
 class NoSQLDB(Database):
     def __init__(self, config):
@@ -95,31 +93,30 @@ class NoSQLDB(Database):
         self.client = None
         self.db = None
 
-    async def connect(self):
+    def connect(self):
         logger.info(f"Connecting to NoSQL DB: {self.config['host']}")
         self.client = MongoClient(self.config['host'], self.config['port'])
         self.db = self.client[self.config['database']]
 
-    async def disconnect(self):
+    def disconnect(self):
         logger.info("Disconnecting from NoSQL DB")
         if self.client:
             self.client.close()
 
-    async def find(self, collection, query):
-        async def _find():
+    def find(self, collection, query):
+        def _find():
             return list(self.db[collection].find(query))
-        return await self.retry_operation(_find)
+        return self.retry_operation(_find)
 
-async def fetch_from_api(url):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            response.raise_for_status()
-            return await response.json()
+def fetch_from_api(url):
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
 
 # Define specialized agents
 class Agent(ABC):
     @abstractmethod
-    async def process(self, input_data):
+    def process(self, input_data):
         pass
 
 class CodeAgent(Agent):
@@ -127,7 +124,7 @@ class CodeAgent(Agent):
         self.model = AutoModel.from_pretrained("microsoft/codebert-base")
         self.tokenizer = AutoTokenizer.from_pretrained("microsoft/codebert-base")
 
-    async def process(self, task):
+    def process(self, task):
         logger.info(f"Generating code for: {task}")
         inputs = self.tokenizer(task, return_tensors="pt")
         outputs = self.model(**inputs)
@@ -139,7 +136,7 @@ class CyberSecurityAgent(Agent):
     def __init__(self):
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
 
-    async def process(self, code):
+    def process(self, code):
         logger.info("Evaluating security of the code")
         embedding = self.model.encode(code)
         # This is a simplified example. In a real scenario, you'd use the embedding
@@ -150,7 +147,7 @@ class ProjectManagerAgent(Agent):
     def __init__(self):
         self.graph = nx.DiGraph()
 
-    async def process(self, task):
+    def process(self, task):
         logger.info(f"Managing task: {task}")
         self.graph.add_node(task)
         return {"status": "assigned", "deadline": "2024-07-01"}
@@ -159,7 +156,7 @@ class CyberResearchAgent(Agent):
     def __init__(self):
         self.cipher_suite = Fernet(Fernet.generate_key())
 
-    async def process(self, topic):
+    def process(self, topic):
         logger.info(f"Researching cyber threats related to: {topic}")
         encrypted_result = self.cipher_suite.encrypt(f"Threats related to {topic}".encode())
         return {"threats": ["Zero-day exploit", "Ransomware attack"], "encrypted_data": encrypted_result}
@@ -197,7 +194,7 @@ class EnhancedConsensusMechanism:
             history = history[-10:]
         self.agent_performance_history[agent_type] = history
 
-    async def vote(self, proposals: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def vote(self, proposals: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not proposals:
             raise ValueError("No proposals to vote on")
         
@@ -227,7 +224,7 @@ class LLMReasoning:
             "code": AutoTokenizer.from_pretrained("microsoft/codebert-base")
         }
 
-    async def query(self, agent_type: str, question: str) -> str:
+    def query(self, agent_type: str, question: str) -> str:
         logger.info(f"Querying LLM for {agent_type}: {question}")
         model = self.models.get(agent_type)
         tokenizer = self.tokenizers.get(agent_type)
@@ -260,60 +257,48 @@ async def process_task(task_input: TaskInput):
     llm = LLMReasoning()
 
     # Connect to databases
-    await asyncio.gather(
-        vector_db.connect(),
-        rdbms.connect(),
-        nosql_db.connect()
-    )
+    vector_db.connect()
+    rdbms.connect()
+    nosql_db.connect()
 
     try:
-        # Process task
+        # Step 1: Retrieve data from databases
+        query_vector = np.random.rand(1, 768).astype('float32')  # Example query vector
+        vector_results = vector_db.retrieve(query_vector)
+        
+        sql_query = "SELECT * FROM example_table LIMIT 5;"
+        rdbms_results = rdbms.execute_query(sql_query)
+        
+        nosql_query = {"field": "value"}
+        nosql_results = nosql_db.find("example_collection", nosql_query)
+        
+        # Step 2: Process task with specialized agents
+        code_result = await code_agent.process(task)
+        security_result = await security_agent.process(code_result)
         pm_result = await pm_agent.process(task)
-        code = await code_agent.process(task)
-        security_result = await security_agent.process(code)
         research_result = await research_agent.process(task)
 
-        # LLM reasoning
-        llm_result = await llm.query("security", "How to mitigate SQL Injection?")
-
-        # Consensus decision making
+        # Step 3: Achieve consensus
         proposals = [
-            {"action": "Implement 2FA", "agent_type": "CyberSecurityAgent"},
-            {"action": "Use prepared statements", "agent_type": "CodeAgent"},
-            {"action": "Encrypt all data", "agent_type": "CyberResearchAgent"},
-            {"action": "Implement rate limiting", "agent_type": "ProjectManagerAgent"}
+            {"agent_type": "CodeAgent", "result": code_result},
+            {"agent_type": "CyberSecurityAgent", "result": security_result},
+            {"agent_type": "ProjectManagerAgent", "result": pm_result},
+            {"agent_type": "CyberResearchAgent", "result": research_result}
         ]
-        decision = await consensus.vote(proposals)
+        final_decision = consensus.vote(proposals)
 
-        # Query databases
-        vector_result = await vector_db.retrieve(np.random.rand(768).astype(np.float32).reshape(1, -1))
-        rdbms_result = await rdbms.execute_query("SELECT * FROM security_logs LIMIT 5")
-        nosql_result = await nosql_db.find("security_incidents", {"type": "high_risk"})
-
-        # Fetch from API
-        api_result = await fetch_from_api(CONFIG['apis']['security_updates'])
+        # Step 4: Use LLM for reasoning (if needed)
+        llm_response = await llm.query("code", f"What is the best way to implement {task}?")
 
         return {
-            "pm_result": pm_result,
-            "code": code,
-            "security_result": security_result,
-            "research_result": research_result,
-            "llm_result": llm_result,
-            "consensus_decision": decision,
-            "vector_db_result": vector_result,
-            "rdbms_result": rdbms_result,
-            "nosql_result": nosql_result,
-            "api_result": api_result
+            "vector_results": vector_results,
+            "rdbms_results": rdbms_results,
+            "nosql_results": nosql_results,
+            "final_decision": final_decision,
+            "llm_response": llm_response
         }
-
     finally:
         # Disconnect from databases
-        await asyncio.gather(
-            vector_db.disconnect(),
-            rdbms.disconnect(),
-            nosql_db.disconnect()
-        )
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        vector_db.disconnect()
+        rdbms.disconnect()
+        nosql_db.disconnect()
