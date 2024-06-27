@@ -1,0 +1,28 @@
+{
+  "databases": {
+    "vector_db": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "vector_database",
+      "username": "your_username",
+      "password": "your_password"
+    },
+    "rdbms": {
+      "host": "localhost",
+      "port": 5432,
+      "database": "rdbms_database",
+      "username": "your_username",
+      "password": "your_password"
+    },
+    "nosql_db": {
+      "host": "localhost",
+      "port": 27017,
+      "database": "nosql_database",
+      "username": "your_username",
+      "password": "your_password"
+    }
+  },
+  "apis": {
+    "security_updates": "https://api.example.com/security_updates"
+  }
+}
