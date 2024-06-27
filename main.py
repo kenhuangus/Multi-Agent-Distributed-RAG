@@ -3,7 +3,7 @@ import random
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 import requests
-from loguru import logger
+import logging
 import numpy as np
 import torch
 from transformers import AutoTokenizer, AutoModel
@@ -22,7 +22,8 @@ with open('config.json', 'r') as config_file:
     CONFIG = json.load(config_file)
 
 # Set up logging
-logger.add("app.log", rotation="500 MB")
+logging.basicConfig(filename='app.log', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI()
