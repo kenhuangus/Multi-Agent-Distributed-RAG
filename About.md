@@ -1,4 +1,4 @@
-# Distributed RAG Architecture: Code Explanation
+# Distributed RAG Architecture
 
 This document provides a detailed explanation of the Distributed Retrieval-Augmented Generation (RAG) Architecture implementation. The system integrates multiple data sources, specialized agents, and large language models (LLMs) for enhanced information retrieval and decision-making processes.
 
